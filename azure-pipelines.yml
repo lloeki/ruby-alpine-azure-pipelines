@@ -1,0 +1,83 @@
+stages:
+  - stage: Build
+    jobs:
+      - job: linux_musl
+        strategy:
+          matrix:
+            ruby-2.1:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.1-alpine'
+            ruby-2.2:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.2-alpine'
+            ruby-2.3:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.3-alpine'
+            ruby-2.4:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.4-alpine'
+            ruby-2.5:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.5-alpine'
+            ruby-2.6:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.6-alpine'
+            ruby-2.7:
+              imageName: 'ubuntu-latest'
+              containerImage: 'ruby:2.7-alpine'
+        pool:
+          vmImage: $(imageName)
+        steps:
+            - script: docker pull lloeki/$(containerImage)-azure-pipelines || true
+            - script: |
+                set -e
+                set -o pipefail
+                set -x
+                mkdir -p context
+                cat > context/Dockerfile <<EOF
+                FROM $(containerImage)
+                RUN apk add --no-cache readline linux-pam bash sudo nodejs
+                RUN apk add --no-cache shadow || \
+                    ( wget http://dl-cdn.alpinelinux.org/alpine/v3.5/community/x86_64/shadow-4.2.1-r8.apk && \
+                      apk add shadow-*.apk && rm -vf shadow-*.apk )
+                LABEL "com.azure.dev.pipelines.agent.handler.node.path"="/usr/bin/node"
+                EOF
+            - script: docker build --cache-from lloeki/$(containerImage)-azure-pipelines -f context/Dockerfile -t lloeki/$(containerImage)-azure-pipelines context
+            - script: echo "$REGISTRY_PASSWORD" | docker login -u "$REGISTRY_USER" --password-stdin
+              env:
+                  REGISTRY_PASSWORD: $(REGISTRY_PASSWORD)
+                  REGISTRY_USER: $(REGISTRY_USER)
+            - script: docker push lloeki/$(containerImage)-azure-pipelines
+
+  - stage: Test
+    jobs:
+      - job: linux_musl
+        strategy:
+          matrix:
+            ruby-2.1:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.1-alpine-azure-pipelines'
+            ruby-2.2:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.2-alpine-azure-pipelines'
+            ruby-2.3:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.3-alpine-azure-pipelines'
+            ruby-2.4:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.4-alpine-azure-pipelines'
+            ruby-2.5:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.5-alpine-azure-pipelines'
+            ruby-2.6:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.6-alpine-azure-pipelines'
+            ruby-2.7:
+              imageName: 'ubuntu-latest'
+              containerImage: 'lloeki/ruby:2.7-alpine-azure-pipelines'
+        container: $[ variables['containerImage'] ]
+        pool:
+          vmImage: $(imageName)
+        steps:
+          - script: sudo apk add --no-cache build-base || sudo apk add --no-cache binutils libmagic file isl libgomp libatomic mpfr3 mpc1 gcc musl-dev libc-dev g++ make fortify-headers
+          - script: uname -a; gcc --version; ruby --version; bundle --version
